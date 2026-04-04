@@ -8,6 +8,8 @@ from bs4 import BeautifulSoup
 import aiohttp
 import sqlite3
 import re
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
+import xml.etree.ElementTree as ET
 
 import config
 import database
@@ -17,7 +19,58 @@ router = Router()
 
 LAST_NETWORK_STATUS = "OK"
 
+# keys for better view
+main_kb = ReplyKeyboardMarkup(
+    keyboard=[[KeyboardButton(text="🌦 Погода"), KeyboardButton(text="🗓 Расписание")],
+              [KeyboardButton(text="🌐 Статус сети"), KeyboardButton(text="🧹 Очистить БД")],
+              [KeyboardButton(text="🌅 Утренняя сводка")]
+    ],
+    resize_keyboard=True
+)
+
 # --- helpers --- 
+async def get_exchange_rates():
+    try:
+        async with aiohttp.ClientSession() as session:
+            # get json from CB
+            async with session.get('https://www.cbr-xml-daily.ru/daily_json.js') as response:
+                data = await response.json()
+                
+                # get Dollar end Euro
+                usd = data['Valute']['USD']['Value']
+                eur = data['Valute']['EUR']['Value']
+                
+                return f"💵 USD: {usd:.2f} ₽ | 💶 EUR: {eur:.2f} ₽"
+    except Exception as e:
+        return "💱 Курсы валют сейчас недоступны."
+
+async def get_news():
+    try:
+        async with aiohttp.ClientSession() as session:
+            # Requesting an RSS feed 
+            async with session.get(config.RSS_SITE) as response:
+                xml_data = await response.text()
+                
+                # Python turns XML text into a convenient "tree" of tags
+                root = ET.fromstring(xml_data)
+                
+                # We search for all <item> tags (this is the news) and take only the FIRST THREE [:3]
+                items = root.findall('.//item')[:3]
+                
+                news_text = "📰 **Главные новости:**\n"
+                
+                for item in items:
+                    # Pull out the title and link
+                    title = item.find('title').text
+                    link = item.find('link').text
+                    
+                    # Making a beautiful HTML link
+                    news_text += f"🔹 <a href='{link}'>{title}</a>\n"
+                    
+                return news_text
+    except Exception as e:
+        return "📰 Новости сейчас недоступны."
+
 async def get_hourly_weather(city=config.MY_CITY):
     try: 
         async with aiohttp.ClientSession() as session:
@@ -34,6 +87,40 @@ async def get_hourly_weather(city=config.MY_CITY):
                 return result_text
     except:
         return "Неудалось получить погоду"
+
+async def get_short_weather(city=config.MY_CITY):
+    async with aiohttp.ClientSession() as session:
+        async with session.get(f'https://wttr.in/{city}?format=j1&lang=ru') as response:
+            data = await response.json()
+            
+            hourly_forecasts = data['weather'][0]['hourly']
+            
+            current_hour = datetime.now().hour
+            
+            result_text = "🌤 Погода на ближайшее время:\n"
+            added_count = 0 
+            
+            for hour_data in hourly_forecasts:
+                # wttr.in returns time in the format "0", "300", "1200" (this is 00:00, 03:00, 12:00)
+                time_val = int(hour_data['time']) // 100 
+                
+                # If the forecast is for a time that HAS ALREADY PASSED, skip (continue)
+                # Take it with a small margin (-2 hours) to capture the current block
+                if time_val < current_hour - 2:
+                    continue
+                    
+                time_str = "00:00" if hour_data['time'] == "0" else f"{hour_data['time'][:-2]}:00"
+                temp = hour_data['tempC']
+                desc = hour_data['lang_ru'][0]['value']
+                
+                result_text += f"🔹 {time_str} | {temp}°C | {desc}\n"
+                added_count += 1
+                
+                # We only need 3 closest forecasts (approximately 9 hours)
+                if added_count >= 3:
+                    break 
+                    
+            return result_text
 
 async def get_today_schedule(text='сегодня'):
     if not text: text = 'сегодня'
@@ -60,10 +147,25 @@ async def send_reminder(bot: Bot, chat_id: int, task_text: str, reminder_id: int
     database.delete_reminder(reminder_id)
 
 async def morning_briefing(bot: Bot):
+    # get data
     weather = await get_hourly_weather(config.MY_CITY)
     schedule_text = await get_today_schedule("сегодня")
-    text = f"Доброе утро! \n\n{weather}\n\n{schedule_text}"
-    await bot.send_message(chat_id=config.MY_ID, text=text)
+    rates = await get_exchange_rates()
+    news = await get_news()
+    outages = await get_outages(config.MY_REGION)
+    
+    # text
+    text = (
+        f"🌅 <b>Доброе утро! Вот сводка на сегодня:</b>\n\n"
+        f"{rates}\n\n"
+        f"{weather}\n\n"
+        f"{outages}\n\n"
+        f"{schedule_text}\n\n"
+        f"{news}"
+    )
+    
+    # send
+    await bot.send_message(chat_id=config.MY_ID, text=text, parse_mode="HTML", disable_web_page_preview=True)
 
 # --- downdetector parse ---
 async def get_outages(region=config.MY_REGION):
@@ -118,23 +220,27 @@ async def monitor_network(bot: Bot):
     # OK -> DOWN
     if is_down and LAST_NETWORK_STATUS == "OK":
         await bot.send_message(config.MY_ID, f"🚨 АЛАРМ! Зафиксированы сбои:\n\n{outages}")
-        LAST_NETWORK_STATUS = "DOWN" # Запоминаем, что сеть лежит
+        LAST_NETWORK_STATUS = "DOWN" 
         
     # DOWN -> OK
     elif not is_down and LAST_NETWORK_STATUS == "DOWN":
         await bot.send_message(config.MY_ID, "✅ Ура! Сбои прекратились, интернет и сервисы работают нормально.")
-        LAST_NETWORK_STATUS = "OK" # Запоминаем, что всё хорошо
+        LAST_NETWORK_STATUS = "OK"
         
     # If OK -> OK or DOWN -> DOWN = nothing :3
 
 # --- handlers ---
 @router.message(Command("start"))
 async def cmd_start(message: types.Message):
-    await message.answer("Бот запущен!\n/r - напомнить\n/c - в календарь\n/s - расписание\n/clear - очисть бд\n/status - статус мобильного интернета")
+    await message.answer(
+        "Бот-помощник запущен! Выбирай действие в меню ниже 👇\n\n"
+        "(оставшиеся команды:\n/r - напомнить\n/c - в календарь\n/s - расписание)",
+        reply_markup=main_kb # add buttons
+    )
+
 
 @router.message(Command("r"))
 async def cmd_remind(message: types.Message, bot: Bot, scheduler):  
-    if message.from_user.id != config.MY_ID: return 
     
     if "-" not in message.text:
         await message.answer("Используй дефис! Пример: /r через 5 минут - текст")
@@ -170,7 +276,6 @@ async def cmd_remind(message: types.Message, bot: Bot, scheduler):
 
 @router.message(Command("c"))
 async def cmd_calendar(message: types.Message):
-    if message.from_user.id != config.MY_ID: return 
     
     if "-" not in message.text:
         await message.answer("Используй дефис! Пример: /c время - ивент - описание")
@@ -214,24 +319,26 @@ async def cmd_calendar(message: types.Message):
     await message.answer(f"✅ Событие «{task_text}» добавлено на {nice_date}!\n<a href='{event_link}'>Открыть в календаре</a>", parse_mode="HTML")
 
 @router.message(Command("s"))
+@router.message(F.text == "🗓 Расписание")
 async def cmd_schedule(message: types.Message):
-    if message.from_user.id != config.MY_ID: return 
-    text = message.text.replace("/s","").strip()
+    if message.text.startswith("/s"):
+        text = message.text.replace("/s", "").strip()
+        if not text:
+            text = "сегодня"
+    else:
+        text = "сегодня"
+        
     reply_text = await get_today_schedule(text)
     await message.answer(reply_text)
 
-@router.message(Command("status"))
+@router.message(F.text == "🌐 Статус сети")
 async def cmd_status(message: types.Message):
-    if message.from_user.id != config.MY_ID: return
     msg = await message.answer("🔄 Проверяю детекторы сбоев...")
     outages = await get_outages(config.MY_REGION)
     await msg.edit_text(outages)
 
 @router.message(Command("clear"))
-async def cmd_clear_reminds(message: types.Message, scheduler):
-    
-    if message.from_user.id != config.MY_ID: return
-    
+async def cmd_clear_reminds(message: types.Message, scheduler):  
     conn = sqlite3.connect('remind.db')
     cursor = conn.cursor()
     cursor.execute("DELETE FROM reminders")
@@ -244,3 +351,15 @@ async def cmd_clear_reminds(message: types.Message, scheduler):
             deleted_count += 1
             
     await message.answer(f"🧹 База полностью очищена!\nУдалено зависших таймеров: {deleted_count}")
+
+@router.message(F.text == "🌦 Погода")
+async def cmd_weather(message: types.Message):
+    msg = await message.answer("🔄 Смотрю в окно...")
+    weather = await get_short_weather(config.MY_CITY)
+    await msg.edit_text(weather)
+
+@router.message(F.text == "🌅 Утренняя сводка")
+async def test_morning(message: types.Message, bot: Bot):
+    msg = await message.answer("🔄 Собираю данные со всего интернета...")
+    await morning_briefing(bot) # Просто вызываем нашу готовую функцию!
+    await msg.delete() # Удаляем сообщение "Собираю данные..."

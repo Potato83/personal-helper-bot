@@ -5,6 +5,7 @@ from datetime import datetime
 from aiogram import Bot, Dispatcher
 from aiogram.client.session.aiohttp import AiohttpSession
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from middlewares import PrivateBotMiddleware
 
 import config
 import database
@@ -54,6 +55,9 @@ async def main():
 
     dp = Dispatcher()
     dp.include_router(router)
+    
+    # guard :3
+    dp.message.middleware(PrivateBotMiddleware(config.MY_ID))
     
 
     dp['scheduler'] = scheduler
