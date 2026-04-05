@@ -11,9 +11,10 @@ import re
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 import xml.etree.ElementTree as ET
 from aiohttp_socks import ProxyConnector 
+import asyncio
 
 import config
-import database
+import database3
 import google_cal
 
 router = Router()
@@ -66,6 +67,7 @@ async def get_news():
 
 async def get_hourly_weather(city=config.MY_CITY):
     try:
+        connector = ProxyConnector.from_url(config.PROXY_URL) if config.PROXY_URL else None
         timeout = aiohttp.ClientTimeout(total=10)
         async with aiohttp.ClientSession() as session:
             async with session.get(f'https://wttr.in/{city}?format=j1&lang=ru') as response:
@@ -101,6 +103,7 @@ async def get_hourly_weather(city=config.MY_CITY):
 
 async def get_short_weather(city=config.MY_CITY):
     try:
+        connector = ProxyConnector.from_url(config.PROXY_URL) if config.PROXY_URL else None
         timeout = aiohttp.ClientTimeout(total=10)
         async with aiohttp.ClientSession() as session:
             async with session.get(f'https://wttr.in/{city}?format=j1&lang=ru') as response:
@@ -212,10 +215,10 @@ async def get_outages(region=config.MY_REGION):
                 status_match = re.search(r'(Жалоб\s*[-–—]\s*[А-Яа-я]+|Сбои\s*[-–—]\s*[А-Яа-я]+|Нет сбоев)', all_text, re.IGNORECASE)
                 status_text = status_match.group(1).capitalize() if status_match else "Статус неизвестен"
                 
-                hour_match = re.search(r'час\s*[:\-]?\s*(\d+[kKкК]?)', all_text, re.IGNORECASE)
+                hour_match = re.search(r'час[^\d]{0,5}(\d+)', all_text, re.IGNORECASE)
                 hour_count = hour_match.group(1) if hour_match else "0"
                 
-                is_bad = any(word in status_text.lower() for word in['сбой', 'много', 'высокий']) or (hour_count.isdigit() and int(hour_count) > 100)
+                is_bad = any(word in status_text.lower() for word in ['сбой', 'много', 'высокий']) or (hour_count.isdigit() and int(hour_count) > 100)
                 
                 if is_bad:
                     return f"⚠️ **ВНИМАНИЕ! Проблемы с интернетом в регионе!**\n📊 Статус: {status_text}\n📈 Жалоб за час: {hour_count}"
