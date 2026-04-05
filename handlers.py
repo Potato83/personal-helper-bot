@@ -72,55 +72,75 @@ async def get_news():
         return "📰 Новости сейчас недоступны."
 
 async def get_hourly_weather(city=config.MY_CITY):
-    try: 
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(f'https://wttr.in/{city}?format=j1&lang=ru') as response:
+                # If the weather site is down, we return a simple string
+                if response.status != 200:
+                    return "☁️ Сервис погоды сейчас недоступен."
+                
+                data = await response.json()
+                hourly_forecasts = data['weather'][0]['hourly']
+                
+                current_hour = datetime.now().hour
+                result_text = "🌤 Погода на ближайшее время:\n"
+                added_count = 0 
+                
+                for hour_data in hourly_forecasts:
+                    time_val = int(hour_data['time']) // 100 
+                    if time_val < current_hour - 2:
+                        continue
+                        
+                    time_str = "00:00" if hour_data['time'] == "0" else f"{hour_data['time'][:-2]}:00"
+                    temp = hour_data['tempC']
+                    desc = hour_data['lang_ru'][0]['value']
+                    
+                    result_text += f"🔹 {time_str} | {temp}°C | {desc}\n"
+                    added_count += 1
+                    if added_count >= 3:
+                        break 
+                        
+                return result_text
+    except Exception as e:
+        # If any error occurred at all (the site did not return JSON, etc.)
+        return "☁️ Не удалось загрузить прогноз погоды."
+
+async def get_short_weather(city=config.MY_CITY):
+    try:
         async with aiohttp.ClientSession() as session:
             async with session.get(f'https://wttr.in/{city}?format=j1&lang=ru') as response:
                 data = await response.json()
+                
                 hourly_forecasts = data['weather'][0]['hourly']
-                result_text = "🌤 Прогноз на день:\n"
+                
+                current_hour = datetime.now().hour
+                
+                result_text = "🌤 Погода на ближайшее время:\n"
+                added_count = 0 
+                
                 for hour_data in hourly_forecasts:
-                    time_raw = hour_data['time']
-                    time_str = "00:00" if time_raw == "0" else f"{time_raw[:-2]}:00"
+                    # wttr.in returns time in the format "0", "300", "1200" (this is 00:00, 03:00, 12:00)
+                    time_val = int(hour_data['time']) // 100 
+                    
+                    # If the forecast is for a time that HAS ALREADY PASSED, skip (continue)
+                    # Take it with a small margin (-2 hours) to capture the current block
+                    if time_val < current_hour - 2:
+                        continue
+                        
+                    time_str = "00:00" if hour_data['time'] == "0" else f"{hour_data['time'][:-2]}:00"
                     temp = hour_data['tempC']
                     desc = hour_data['lang_ru'][0]['value']
+                    
                     result_text += f"🔹 {time_str} | {temp}°C | {desc}\n"
+                    added_count += 1
+                    
+                    # We only need 3 closest forecasts (approximately 9 hours)
+                    if added_count >= 3:
+                        break 
+                        
                 return result_text
     except:
-        return "Неудалось получить погоду"
-
-async def get_short_weather(city=config.MY_CITY):
-    async with aiohttp.ClientSession() as session:
-        async with session.get(f'https://wttr.in/{city}?format=j1&lang=ru') as response:
-            data = await response.json()
-            
-            hourly_forecasts = data['weather'][0]['hourly']
-            
-            current_hour = datetime.now().hour
-            
-            result_text = "🌤 Погода на ближайшее время:\n"
-            added_count = 0 
-            
-            for hour_data in hourly_forecasts:
-                # wttr.in returns time in the format "0", "300", "1200" (this is 00:00, 03:00, 12:00)
-                time_val = int(hour_data['time']) // 100 
-                
-                # If the forecast is for a time that HAS ALREADY PASSED, skip (continue)
-                # Take it with a small margin (-2 hours) to capture the current block
-                if time_val < current_hour - 2:
-                    continue
-                    
-                time_str = "00:00" if hour_data['time'] == "0" else f"{hour_data['time'][:-2]}:00"
-                temp = hour_data['tempC']
-                desc = hour_data['lang_ru'][0]['value']
-                
-                result_text += f"🔹 {time_str} | {temp}°C | {desc}\n"
-                added_count += 1
-                
-                # We only need 3 closest forecasts (approximately 9 hours)
-                if added_count >= 3:
-                    break 
-                    
-            return result_text
+        return "неполучилось собрать погоду"
 
 async def get_today_schedule(text='сегодня'):
     if not text: text = 'сегодня'
@@ -182,8 +202,8 @@ async def get_outages(region=config.MY_REGION):
         async with aiohttp.ClientSession(headers=headers) as session:
             async with session.get(url) as response:
                 if response.status != 200:
-                    error_html = await response.text()
-                    error_snippet = error_html[:200].replace('\n', ' ') 
+                    # УБРАЛИ error_snippet, чтобы не тянуть HTML-мусор в Телеграм!
+                    return f"❌ Ошибка доступа к детектору сбоев (Код: {response.status})"
                     
                     return f"❌ Ошибка доступа!\nКод: {response.status}\nОтвет сайта: {error_snippet}"
                 
