@@ -222,7 +222,7 @@ async def get_outages(region=config.MY_REGION):
                 if is_bad:
                     return f"⚠️ **ВНИМАНИЕ! Проблемы с интернетом в регионе!**\n📊 Статус: {status_text}\n📈"
                 else:
-                    return f"✅ Сеть стабильна.\n📊 Статус: {status_text}\n📈}"
+                    return f"✅ Сеть стабильна.\n📊 Статус: {status_text}\n📈"
                     
     except Exception as e:
         return f"❌ Ошибка парсинга: {e}"
