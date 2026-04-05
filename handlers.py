@@ -14,7 +14,7 @@ from aiohttp_socks import ProxyConnector
 import asyncio
 
 import config
-import database
+import database 
 import google_cal
 
 router = Router()
@@ -67,7 +67,6 @@ async def get_news():
 
 async def get_hourly_weather(city=config.MY_CITY):
     try:
-        connector = ProxyConnector.from_url(config.PROXY_URL) if config.PROXY_URL else None
         timeout = aiohttp.ClientTimeout(total=10)
         async with aiohttp.ClientSession() as session:
             async with session.get(f'https://wttr.in/{city}?format=j1&lang=ru') as response:
@@ -103,7 +102,6 @@ async def get_hourly_weather(city=config.MY_CITY):
 
 async def get_short_weather(city=config.MY_CITY):
     try:
-        connector = ProxyConnector.from_url(config.PROXY_URL) if config.PROXY_URL else None
         timeout = aiohttp.ClientTimeout(total=10)
         async with aiohttp.ClientSession() as session:
             async with session.get(f'https://wttr.in/{city}?format=j1&lang=ru') as response:
@@ -198,6 +196,7 @@ async def get_outages(region=config.MY_REGION):
     }
     
     try:
+        timeout = aiohttp.ClientTimeout(total=10)
         async with aiohttp.ClientSession(headers=headers) as session:
             async with session.get(url) as response:
                 if response.status != 200:
@@ -218,12 +217,12 @@ async def get_outages(region=config.MY_REGION):
                 hour_match = re.search(r'час[^\d]{0,5}(\d+)', all_text, re.IGNORECASE)
                 hour_count = hour_match.group(1) if hour_match else "0"
                 
-                is_bad = any(word in status_text.lower() for word in ['сбой', 'много', 'высокий']) or (hour_count.isdigit() and int(hour_count) > 100)
+                is_bad = any(word in status_text.lower() for word in['сбой', 'много', 'высокий'])
                 
                 if is_bad:
-                    return f"⚠️ **ВНИМАНИЕ! Проблемы с интернетом в регионе!**\n📊 Статус: {status_text}\n📈 Жалоб за час: {hour_count}"
+                    return f"⚠️ **ВНИМАНИЕ! Проблемы с интернетом в регионе!**\n📊 Статус: {status_text}\n📈"
                 else:
-                    return f"✅ Сеть стабильна.\n📊 Статус: {status_text}\n📈 Жалоб за час: {hour_count}"
+                    return f"✅ Сеть стабильна.\n📊 Статус: {status_text}\n📈}"
                     
     except Exception as e:
         return f"❌ Ошибка парсинга: {e}"
