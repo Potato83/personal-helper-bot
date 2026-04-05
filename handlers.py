@@ -40,7 +40,7 @@ async def get_exchange_rates():
                 
                 return f"💵 USD: {usd:.2f} ₽ | 💶 EUR: {eur:.2f} ₽"
     except Exception as e:
-        return "💱 Курсы валют сейчас недоступны. Ошибка: {e}"
+        return f"💱 Курсы валют сейчас недоступны. Ошибка: {e}"
 
 async def get_news():
     try:
@@ -61,7 +61,7 @@ async def get_news():
                     
                 return news_text
     except Exception as e:
-        return "📰 Новости сейчас недоступны. Ошибка: {e}"
+        return f"📰 Новости сейчас недоступны. Ошибка: {e}"
 
 async def get_hourly_weather(city=config.MY_CITY):
     try:
@@ -95,7 +95,7 @@ async def get_hourly_weather(city=config.MY_CITY):
                 return result_text
     except Exception as e:
         # If any error occurred at all (the site did not return JSON, etc.)
-        return "☁️ Не удалось загрузить прогноз погоды."
+        return f"☁️ Не удалось загрузить прогноз погоды."
 
 async def get_short_weather(city=config.MY_CITY):
     try:
@@ -132,7 +132,7 @@ async def get_short_weather(city=config.MY_CITY):
                         
                 return result_text
     except Exception as e:
-        return "☁️ Не удалось загрузить прогноз погоды."
+        return f"☁️ Не удалось загрузить прогноз погоды."
 
 async def get_today_schedule(text='сегодня'):
     if not text: text = 'сегодня'
