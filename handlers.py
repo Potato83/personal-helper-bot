@@ -2,7 +2,7 @@ import re
 import aiohttp
 import dateparser
 from datetime import datetime, timedelta
-from aiogram import Router, types, Bot
+from aiogram import Router, types, Bot, F
 from aiogram.filters import Command
 from bs4 import BeautifulSoup
 import aiohttp
