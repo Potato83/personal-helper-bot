@@ -10,6 +10,7 @@ import sqlite3
 import re
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 import xml.etree.ElementTree as ET
+from aiohttp_socks import ProxyConnector 
 
 import config
 import database
@@ -32,44 +33,35 @@ main_kb = ReplyKeyboardMarkup(
 async def get_exchange_rates():
     try:
         async with aiohttp.ClientSession() as session:
-            # get json from CB
             async with session.get('https://www.cbr-xml-daily.ru/daily_json.js') as response:
                 data = await response.json()
-                
-                # get Dollar end Euro
                 usd = data['Valute']['USD']['Value']
                 eur = data['Valute']['EUR']['Value']
                 
                 return f"💵 USD: {usd:.2f} ₽ | 💶 EUR: {eur:.2f} ₽"
     except Exception as e:
-        return "💱 Курсы валют сейчас недоступны."
+        return "💱 Курсы валют сейчас недоступны. Ошибка: {e}"
 
 async def get_news():
     try:
-        async with aiohttp.ClientSession() as session:
+        connector = ProxyConnector.from_url(config.PROXY_URL) if config.PROXY_URL else None
+        
+        async with aiohttp.ClientSession(connector=connector) as session:
             # Requesting an RSS feed 
             async with session.get(config.RSS_SITE) as response:
                 xml_data = await response.text()
-                
-                # Python turns XML text into a convenient "tree" of tags
                 root = ET.fromstring(xml_data)
-                
-                # We search for all <item> tags (this is the news) and take only the FIRST THREE [:3]
                 items = root.findall('.//item')[:3]
-                
                 news_text = "📰 **Главные новости:**\n"
                 
                 for item in items:
-                    # Pull out the title and link
                     title = item.find('title').text
                     link = item.find('link').text
-                    
-                    # Making a beautiful HTML link
                     news_text += f"🔹 <a href='{link}'>{title}</a>\n"
                     
                 return news_text
     except Exception as e:
-        return "📰 Новости сейчас недоступны."
+        return "📰 Новости сейчас недоступны. Ошибка: {e}"
 
 async def get_hourly_weather(city=config.MY_CITY):
     try:
@@ -139,8 +131,8 @@ async def get_short_weather(city=config.MY_CITY):
                         break 
                         
                 return result_text
-    except:
-        return "неполучилось собрать погоду"
+    except Exception as e:
+        return "☁️ Не удалось загрузить прогноз погоды."
 
 async def get_today_schedule(text='сегодня'):
     if not text: text = 'сегодня'
