@@ -32,9 +32,10 @@ main_kb = ReplyKeyboardMarkup(
 # --- helpers --- 
 async def get_exchange_rates():
     try:
+        timeout = aiohttp.ClientTimeout(total=10)
         async with aiohttp.ClientSession() as session:
             async with session.get('https://www.cbr-xml-daily.ru/daily_json.js') as response:
-                data = await response.json()
+                data = await response.json(content_type=None)
                 usd = data['Valute']['USD']['Value']
                 eur = data['Valute']['EUR']['Value']
                 
@@ -44,8 +45,8 @@ async def get_exchange_rates():
 
 async def get_news():
     try:
+        timeout = aiohttp.ClientTimeout(total=15)
         connector = ProxyConnector.from_url(config.PROXY_URL) if config.PROXY_URL else None
-        
         async with aiohttp.ClientSession(connector=connector) as session:
             # Requesting an RSS feed 
             async with session.get(config.RSS_SITE) as response:
@@ -65,13 +66,14 @@ async def get_news():
 
 async def get_hourly_weather(city=config.MY_CITY):
     try:
+        timeout = aiohttp.ClientTimeout(total=10)
         async with aiohttp.ClientSession() as session:
             async with session.get(f'https://wttr.in/{city}?format=j1&lang=ru') as response:
                 # If the weather site is down, we return a simple string
                 if response.status != 200:
                     return "☁️ Сервис погоды сейчас недоступен."
                 
-                data = await response.json()
+                data = await response.json(content_type=None)
                 hourly_forecasts = data['weather'][0]['hourly']
                 
                 current_hour = datetime.now().hour
@@ -95,10 +97,11 @@ async def get_hourly_weather(city=config.MY_CITY):
                 return result_text
     except Exception as e:
         # If any error occurred at all (the site did not return JSON, etc.)
-        return f"☁️ Не удалось загрузить прогноз погоды."
+        return f"☁️ Не удалось загрузить прогноз погоды. {type(e).__name__}"
 
 async def get_short_weather(city=config.MY_CITY):
     try:
+        timeout = aiohttp.ClientTimeout(total=10)
         async with aiohttp.ClientSession() as session:
             async with session.get(f'https://wttr.in/{city}?format=j1&lang=ru') as response:
                 data = await response.json()
@@ -159,14 +162,16 @@ async def send_reminder(bot: Bot, chat_id: int, task_text: str, reminder_id: int
     database.delete_reminder(reminder_id)
 
 async def morning_briefing(bot: Bot):
-    # get data
-    weather = await get_hourly_weather(config.MY_CITY)
-    schedule_text = await get_today_schedule("сегодня")
-    rates = await get_exchange_rates()
-    news = await get_news()
-    outages = await get_outages(config.MY_REGION)
+    weather_task = get_hourly_weather(config.MY_CITY)
+    schedule_task = get_today_schedule("сегодня")
+    rates_task = get_exchange_rates()
+    news_task = get_news()
+    outages_task = get_outages(config.MY_REGION)
+      
+    weather, schedule_text, rates, news, outages = await asyncio.gather(
+        weather_task, schedule_task, rates_task, news_task, outages_task
+    )
     
-    # text
     text = (
         f"🌅 <b>Доброе утро! Вот сводка на сегодня:</b>\n\n"
         f"{rates}\n\n"
@@ -176,7 +181,6 @@ async def morning_briefing(bot: Bot):
         f"{news}"
     )
     
-    # send
     await bot.send_message(chat_id=config.MY_ID, text=text, parse_mode="HTML", disable_web_page_preview=True)
 
 # --- downdetector parse ---
@@ -372,6 +376,11 @@ async def cmd_weather(message: types.Message):
 
 @router.message(F.text == "🌅 Утренняя сводка")
 async def test_morning(message: types.Message, bot: Bot):
-    msg = await message.answer("🔄 Собираю данные со всего интернета...")
-    await morning_briefing(bot) # Просто вызываем нашу готовую функцию!
-    await msg.delete() # Удаляем сообщение "Собираю данные..."
+    msg = await message.answer("🔄 Собираю данные со всего интернета (турбо-режим)...")
+    
+    start_time = datetime.now()
+    await morning_briefing(bot)
+    end_time = datetime.now()
+    
+    seconds = (end_time - start_time).seconds
+    await msg.edit_text(f"✅ Сводка собрана за {seconds} секунд!")
