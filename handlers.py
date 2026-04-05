@@ -220,9 +220,9 @@ async def get_outages(region=config.MY_REGION):
                 is_bad = any(word in status_text.lower() for word in['сбой', 'много', 'высокий'])
                 
                 if is_bad:
-                    return f"⚠️ **ВНИМАНИЕ! Проблемы с интернетом в регионе!**\n📊 Статус: {status_text}\n📈"
+                    return f"⚠️ **ВНИМАНИЕ! Проблемы с интернетом в регионе!**\n📊 Статус: {status_text}"
                 else:
-                    return f"✅ Сеть стабильна.\n📊 Статус: {status_text}\n📈"
+                    return f"✅ Сеть стабильна.\n📊 Статус: {status_text}"
                     
     except Exception as e:
         return f"❌ Ошибка парсинга: {e}"
