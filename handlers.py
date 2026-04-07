@@ -65,78 +65,37 @@ async def get_news():
     except Exception as e:
         return f"📰 Новости сейчас недоступны. Ошибка: {e}"
 
-async def get_hourly_weather(city=config.MY_CITY):
-    try:
-        timeout = aiohttp.ClientTimeout(total=10)
-        async with aiohttp.ClientSession() as session:
-            async with session.get(f'https://wttr.in/{city}?format=j1&lang=ru') as response:
-                # If the weather site is down, we return a simple string
-                if response.status != 200:
-                    return "☁️ Сервис погоды сейчас недоступен."
-                
-                data = await response.json(content_type=None)
-                hourly_forecasts = data['weather'][0]['hourly']
-                
-                current_hour = datetime.now().hour
-                result_text = "🌤 Погода на ближайшее время:\n"
-                added_count = 0 
-                
-                for hour_data in hourly_forecasts:
-                    time_val = int(hour_data['time']) // 100 
-                    if time_val < current_hour - 2:
-                        continue
-                        
-                    time_str = "00:00" if hour_data['time'] == "0" else f"{hour_data['time'][:-2]}:00"
-                    temp = hour_data['tempC']
-                    desc = hour_data['lang_ru'][0]['value']
-                    
-                    result_text += f"🔹 {time_str} | {temp}°C | {desc}\n"
-                    added_count += 1
-                    if added_count >= 3:
-                        break 
-                        
-                return result_text
-    except Exception as e:
-        # If any error occurred at all (the site did not return JSON, etc.)
-        return f"☁️ Не удалось загрузить прогноз погоды. {type(e).__name__}"
+async def get_weather(city=config.MY_CITY):
+    if not config.OWM_API_KEY:
+        return "☁️ Ошибка: API ключ для погоды не настроен."
 
-async def get_short_weather(city=config.MY_CITY):
     try:
+        url = f"https://api.openweathermap.org/data/2.5/forecast?q={city}&appid={config.OWM_API_KEY}&units=metric&lang=ru"
+
         timeout = aiohttp.ClientTimeout(total=10)
-        async with aiohttp.ClientSession() as session:
-            async with session.get(f'https://wttr.in/{city}?format=j1&lang=ru') as response:
+        connector = ProxyConnector.from_url(config.PROXY_URL) if config.PROXY_URL else None
+        
+        async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
+            async with session.get(url) as response:
+                if response.status != 200:
+                    return f"☁️ Ошибка API погоды. Код ответа: {response.status}"
+                
                 data = await response.json()
+                forecasts = data.get('list',[])
                 
-                hourly_forecasts = data['weather'][0]['hourly']
-                
-                current_hour = datetime.now().hour
-                
-                result_text = "🌤 Погода на ближайшее время:\n"
-                added_count = 0 
-                
-                for hour_data in hourly_forecasts:
-                    # wttr.in returns time in the format "0", "300", "1200" (this is 00:00, 03:00, 12:00)
-                    time_val = int(hour_data['time']) // 100 
-                    
-                    # If the forecast is for a time that HAS ALREADY PASSED, skip (continue)
-                    # Take it with a small margin (-2 hours) to capture the current block
-                    if time_val < current_hour - 2:
-                        continue
-                        
-                    time_str = "00:00" if hour_data['time'] == "0" else f"{hour_data['time'][:-2]}:00"
-                    temp = hour_data['tempC']
-                    desc = hour_data['lang_ru'][0]['value']
+                result_text = f"🌤 Погода ({city}) на ближайшее время:\n"
+                for item in forecasts[:3]:
+                    time_str = item['dt_txt'][11:16]
+                    temp = round(item['main']['temp'])
+                    desc = item['weather'][0]['description'].capitalize()
                     
                     result_text += f"🔹 {time_str} | {temp}°C | {desc}\n"
-                    added_count += 1
                     
-                    # We only need 3 closest forecasts (approximately 9 hours)
-                    if added_count >= 3:
-                        break 
-                        
                 return result_text
+    except TimeoutError:
+        return "☁️ Сервис погоды не ответил вовремя (Timeout)."
     except Exception as e:
-        return f"☁️ Не удалось загрузить прогноз погоды."
+        return f"☁️ Внутренняя ошибка парсинга погоды: {type(e).__name__}"
 
 async def get_today_schedule(text='сегодня'):
     if not text: text = 'сегодня'
@@ -163,7 +122,7 @@ async def send_reminder(bot: Bot, chat_id: int, task_text: str, reminder_id: int
     database.delete_reminder(reminder_id)
 
 async def morning_briefing(bot: Bot):
-    weather_task = get_hourly_weather(config.MY_CITY)
+    weather_task = get_weather(config.MY_CITY)
     schedule_task = get_today_schedule("сегодня")
     rates_task = get_exchange_rates()
     news_task = get_news()
@@ -372,8 +331,8 @@ async def cmd_clear_reminds(message: types.Message, scheduler):
 
 @router.message(F.text == "🌦 Погода")
 async def cmd_weather(message: types.Message):
-    msg = await message.answer("🔄 Смотрю в окно...")
-    weather = await get_short_weather(config.MY_CITY)
+    msg = await message.answer("🔄 Связываюсь с метеорологами...")
+    weather = await get_weather(config.MY_CITY)
     await msg.edit_text(weather)
 
 @router.message(F.text == "🌅 Утренняя сводка")
