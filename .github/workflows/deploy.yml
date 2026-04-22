@@ -15,6 +15,7 @@ jobs:
           host: ${{ secrets.HOST }}
           username: ${{ secrets.USER }}
           key: ${{ secrets.SSH }}
+          port: ${{ secrets.PORT }}
           script: |
             cd ${{ secrets.WORK_DIR }}
             git pull origin main
