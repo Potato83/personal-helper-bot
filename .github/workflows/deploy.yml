@@ -6,6 +6,29 @@ on:
       - main
 
 jobs:
+  test_and_security:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.12"
+          cache: 'pip'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Bandit (SAST Security Check)
+        run: bandit -r . -x ./tests -c bandit.yaml || bandit -r . -x ./tests
+
+      - name: Run Pytest
+        run: pytest tests/ -v
+
   deploy:
     runs-on: ubuntu-latest
     steps:

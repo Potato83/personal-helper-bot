@@ -4,9 +4,9 @@ services:
   jarvis-bot:
     build: .
     container_name: jarvis_bot
-    restart: unless-stopped # Бот будет сам подниматься при перезагрузке сервера
+    restart: unless-stopped 
     env_file:
       - .env
     volumes:
-      - ./data:/app/data # Пробрасываем папку с БД
-      - ./credentials.json:/app/credentials.json:ro # Пробрасываем ключи Google (Read-Only)
+      - ./data:/app/data
+      - ./credentials.json:/app/credentials.json:ro

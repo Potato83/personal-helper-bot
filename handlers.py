@@ -159,7 +159,10 @@ async def get_outages(region=config.MY_REGION):
         async with aiohttp.ClientSession(headers=headers) as session:
             async with session.get(url) as response:
                 if response.status != 200:
+                    # УБРАЛИ error_snippet, чтобы не тянуть HTML-мусор в Телеграм!
                     return f"❌ Ошибка доступа к детектору сбоев (Код: {response.status})"
+                    
+                    return f"❌ Ошибка доступа!\nКод: {response.status}\nОтвет сайта: {error_snippet}"
                 
                 html = await response.text()
                 
@@ -313,7 +316,7 @@ async def cmd_status(message: types.Message):
 
 @router.message(Command("clear"))
 async def cmd_clear_reminds(message: types.Message, scheduler):  
-    conn = sqlite3.connect('remind.db')
+    conn = sqlite3.connect('data/remind.db')
     cursor = conn.cursor()
     cursor.execute("DELETE FROM reminders")
     conn.commit()

@@ -13,4 +13,4 @@ COPY . .
 
 RUN mkdir -p data
 
-CMD ["python", "main.py"]
+CMD["python", "main.py"]
