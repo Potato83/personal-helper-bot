@@ -9,7 +9,7 @@ import aiohttp
 import sqlite3
 import re
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
-import xml.etree.ElementTree as ET
+from defusedxml import ElementTree as ET
 from aiohttp_socks import ProxyConnector 
 import asyncio
 
