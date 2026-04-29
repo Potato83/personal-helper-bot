@@ -1,6 +1,6 @@
 import pytest
 import sqlite3
-import database
+import app.database.database as database
 
 # 1. Запоминаем оригинальную функцию из стандартной библиотеки ДО подмены
 original_connect = sqlite3.connect

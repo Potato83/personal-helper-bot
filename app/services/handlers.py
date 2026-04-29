@@ -13,9 +13,9 @@ from defusedxml import ElementTree as ET
 from aiohttp_socks import ProxyConnector 
 import asyncio
 
-import config
-import database 
-import google_cal
+import app.core.config as config
+import app.database.database as database 
+import app.services.google_cal as google_cal
 
 router = Router()
 

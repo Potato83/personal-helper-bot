@@ -1,6 +1,6 @@
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
-import config
+import app.core.config as config
 
 SCOPES = ['https://www.googleapis.com/auth/calendar']
 SERVICE_ACCOUNT_FILE = 'credentials.json'

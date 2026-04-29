@@ -5,11 +5,11 @@ from datetime import datetime
 from aiogram import Bot, Dispatcher
 from aiogram.client.session.aiohttp import AiohttpSession
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from middlewares import PrivateBotMiddleware
+from app.core.middlewares import PrivateBotMiddleware
 
-import config
-import database
-from handlers import router, send_reminder, morning_briefing, monitor_network
+import app.core.config as config
+import app.database.database as database
+from app.handlers.handlers import router, send_reminder, morning_briefing, monitor_network
 
 # --- patch SSL ---
 #old_init = aiohttp.TCPConnector.__init__
