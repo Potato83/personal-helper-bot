@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - main
+  pull_request:
+    branches:
+      - main
 
 jobs:
   test_and_security:
@@ -24,12 +27,15 @@ jobs:
           pip install -r requirements.txt
 
       - name: Run Bandit (SAST Security Check)
-        run: bandit -r . -x ./tests -c bandit.yaml || bandit -r . -x ./tests
+        # Проверяем только наш код (app и main.py), игнорируем тесты и виртуальное окружение
+        run: bandit -r app/ main.py
 
       - name: Run Pytest
         run: pytest tests/ -v
 
   deploy:
+    needs: test_and_security # Ждет успешного завершения job'ы test_and_security
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push' # Выполняется ТОЛЬКО при пуше или мерже в main
     runs-on: ubuntu-latest
     steps:
       - name: Deploy to Server via SSH
