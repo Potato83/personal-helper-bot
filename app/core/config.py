@@ -3,12 +3,18 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-PROXY_URL = os.getenv("PROXY_URL")
-MY_ID = int(os.getenv("MY_ID", 0))
-MY_EMAIL = os.getenv("MY_EMAIL")
-MY_CITY = os.getenv("MY_CITY", "Moscow")
-MY_TIME_ZONE = os.getenv("MY_TIME_ZONE", "Europe/Moscow")
-MY_REGION=os.getenv("MY_REGION")
-RSS_SITE=os.getenv("RSS_SITE")
-OWM_API_KEY = os.getenv("OWM_API_KEY")
+def _get_env_or_raise(key: str, default=None) -> str:
+    val = os.getenv(key, default)
+    if val is None:
+        raise ValueError(f"Критическая ошибка: переменная окружения {key} не задана!")
+    return val
+
+BOT_TOKEN = _get_env_or_raise("BOT_TOKEN")
+PROXY_URL = os.getenv("PROXY_URL")  # Прокси может быть пустым
+MY_ID = int(_get_env_or_raise("MY_ID", "0"))
+MY_EMAIL = _get_env_or_raise("MY_EMAIL")
+MY_CITY = _get_env_or_raise("MY_CITY", "Moscow")
+MY_TIME_ZONE = _get_env_or_raise("MY_TIME_ZONE", "Europe/Moscow")
+MY_REGION = _get_env_or_raise("MY_REGION")
+RSS_SITE = _get_env_or_raise("RSS_SITE")
+OWM_API_KEY = _get_env_or_raise("OWM_API_KEY")

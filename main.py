@@ -1,6 +1,6 @@
 import asyncio
-import logging
 import aiohttp
+from loguru import logger
 from datetime import datetime
 from aiogram import Bot, Dispatcher
 from aiogram.client.session.aiohttp import AiohttpSession
@@ -9,17 +9,19 @@ from app.core.middlewares import PrivateBotMiddleware
 
 import app.core.config as config
 import app.database.database as database
-from app.handlers.handlers import router, send_reminder, morning_briefing, monitor_network
+from app.services.handlers import router, send_reminder, morning_briefing, monitor_network
+
+from app.core.http_client import init_http_client, close_http_client
 
 # --- patch SSL ---
-#old_init = aiohttp.TCPConnector.__init__
-#def new_init(self, *args, **kwargs):
-#    kwargs['ssl'] = False
-#    old_init(self, *args, **kwargs)
-#aiohttp.TCPConnector.__init__ = new_init
+old_init = aiohttp.TCPConnector.__init__
+def new_init(self, *args, **kwargs):
+   kwargs['ssl'] = False
+   old_init(self, *args, **kwargs)
+aiohttp.TCPConnector.__init__ = new_init
 
-def restore_reminders(scheduler: AsyncIOScheduler, bot: Bot):
-    rows = database.get_all_reminders()
+async def restore_reminders(scheduler: AsyncIOScheduler, bot: Bot):
+    rows = await database.get_all_reminders()
     for row in rows:
         reminder_id, chat_id, task_text, time_str = row
         try:
@@ -32,11 +34,10 @@ def restore_reminders(scheduler: AsyncIOScheduler, bot: Bot):
             run_date=time_obj,            
             kwargs={'bot': bot, 'chat_id': chat_id, 'task_text': task_text, 'reminder_id': reminder_id}
         )
-    print(f"Восстановлено напоминаний: {len(rows)}")
+    logger.info(f"Восстановлено напоминаний: {len(rows)}")
 
 async def main():
-    logging.basicConfig(level=logging.INFO)
-    database.init_db()
+    await database.init_db()
 
     if config.PROXY_URL:
         session = AiohttpSession(proxy=config.PROXY_URL)
@@ -45,24 +46,22 @@ async def main():
         bot = Bot(token=config.BOT_TOKEN)
 
     scheduler = AsyncIOScheduler(timezone=config.MY_TIME_ZONE)
-    restore_reminders(scheduler, bot)
+    await restore_reminders(scheduler, bot)
     
     scheduler.add_job(morning_briefing, trigger='cron', hour=6, minute=0, kwargs={'bot': bot})
     scheduler.start()
     
-    # network monitoring
     scheduler.add_job(monitor_network, trigger='interval', minutes=15, kwargs={'bot': bot})
 
     dp = Dispatcher()
     dp.include_router(router)
-    
-    # guard :3
     dp.message.middleware(PrivateBotMiddleware(config.MY_ID))
-    
-
     dp['scheduler'] = scheduler
 
-    print("--- БОТ НАПОМИНАЛКА ЗАПУЩЕН ---") 
+    dp.startup.register(init_http_client)
+    dp.shutdown.register(close_http_client)
+    
+    logger.info("--- БОТ НАПОМИНАЛКА ЗАПУЩЕН ---") 
     await dp.start_polling(bot)
     
 
