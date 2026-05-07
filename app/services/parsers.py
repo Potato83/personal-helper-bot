@@ -32,32 +32,47 @@ async def get_news():
         logger.exception("Ошибка получения новостей")
         return "📰 Новости сейчас недоступны."
 
-async def get_weather(city=config.MY_CITY):
+from datetime import datetime
+
+async def get_weather(city=config.MY_CITY, target_date_str=None):
     if not config.OWM_API_KEY:
         return "☁️ Ошибка: API ключ для погоды не настроен."
     try:
         url = "https://api.openweathermap.org/data/2.5/forecast"
-        params = {
-            "q": city,
-            "appid": config.OWM_API_KEY,
-            "units": "metric",
-            "lang": "ru"
-        }
+        params = {"q": city, "appid": config.OWM_API_KEY, "units": "metric", "lang": "ru"}
+        
         async with get_session().get(url, params=params) as response:
             if response.status != 200:
-                error_data = await response.text()
-                logger.error(f"OWM Error: {error_data}")
                 return f"☁️ Ошибка API погоды. Код ответа: {response.status}"
             
             data = await response.json()
             forecasts = data.get('list',[])
             
-            result_text = f"🌤 Погода ({city}) на ближайшее время:\n"
-            for item in forecasts[:3]:
-                time_str = item['dt_txt'][11:16]
+            target_date_prefix = None
+            if target_date_str:
+                target_date_prefix = target_date_str[:10] 
+            
+            result_text = f"🌤 Погода ({city}):\n"
+            count = 0
+            
+            for item in forecasts:
+                dt_txt = item['dt_txt']
+                
+                if target_date_prefix and not dt_txt.startswith(target_date_prefix):
+                    continue
+                    
+                time_str = dt_txt[11:16]
                 temp = round(item['main']['temp'])
                 desc = item['weather'][0]['description'].capitalize()
                 result_text += f"🔹 {time_str} | {temp}°C | {desc}\n"
+                count += 1
+                
+                # Берем 4 интервала (чтобы показать утро/день/вечер)
+                if count >= 4:
+                    break
+                    
+            if count == 0:
+                return f"☁️ Прогноз на эту дату недоступен (API дает прогноз на 5 дней)."
                 
             return result_text
     except Exception:

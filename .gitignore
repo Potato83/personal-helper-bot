@@ -4,3 +4,4 @@ remind.db
 venv
 /tests/__pycache__
 /__pycache__
+/data

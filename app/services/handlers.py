@@ -11,6 +11,9 @@ import asyncio
 from app.services.parsers import get_exchange_rates, get_news, get_weather, get_outages
 from app.services.google_cal import get_today_schedule
 from app.core.state import bot_state
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
+from app.services.ai_service import process_user_intent
+from app.core.state import bot_state
 
 import app.core.config as config
 import app.database.database as database 
@@ -206,3 +209,111 @@ async def test_morning(message: types.Message, bot: Bot):
     
     seconds = (end_time - start_time).seconds
     await msg.edit_text(f"✅ Сводка собрана за {seconds} секунд!")
+    
+# --- AI и Inline Обработчики ---
+@router.message(F.text)
+async def handle_ai_chat(message: types.Message):
+    msg = await message.answer("🤔 Думаю...")
+    
+    intent = await process_user_intent(message.text)
+    action = intent.get("action")
+    text = intent.get("text", "")
+    time_str = intent.get("time", "")
+
+    if action == "chat":
+        await msg.edit_text(text)
+        
+    elif action == "weather":
+        await msg.edit_text("🔄 Смотрю на небо...")
+        weather = await get_weather(config.MY_CITY, time_str)
+        await msg.edit_text(weather)
+            
+    elif action == "schedule":
+        await msg.edit_text("🔄 Проверяю календарь...")
+        target_date = time_str if time_str else "сегодня"
+        sched = await get_today_schedule(target_date)
+        await msg.edit_text(sched)
+        
+    elif action in ["remind", "calendar"]:
+        bot_state.pending_actions[message.from_user.id] = {
+            "action": action,
+            "text": text,
+            "time": time_str
+        }
+        
+        action_name = "напоминание" if action == "remind" else "событие в календарь"
+        
+        kb = InlineKeyboardMarkup(inline_keyboard=[[
+                InlineKeyboardButton(text="✅ Добавить", callback_data="confirm_action"),
+                InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_action")
+            ]
+        ])
+        
+        await msg.edit_text(
+            f"🤖 Я понял так. Добавляем {action_name}?\n\n"
+            f"📝 <b>Что:</b> {text}\n"
+            f"🕒 <b>Когда:</b> {time_str}",
+            parse_mode="HTML",
+            reply_markup=kb
+        )
+    else:
+        await msg.edit_text("❌ Не понял запрос. Попробуй иначе.")
+
+@router.callback_query(F.data.in_(["confirm_action", "cancel_action"]))
+async def process_inline_action(callback: CallbackQuery, bot: Bot, scheduler):
+    user_id = callback.from_user.id
+    
+    if callback.data == "cancel_action":
+        bot_state.pending_actions.pop(user_id, None)
+        await callback.message.edit_text("❌ Действие отменено.")
+        await callback.answer()
+        return
+
+    # Если подтвердили (confirm_action)
+    pending = bot_state.pending_actions.pop(user_id, None)
+    if not pending:
+        await callback.answer("⏳ Время вышло или действие уже выполнено", show_alert=True)
+        return
+        
+    action, text, time_str = pending["action"], pending["text"], pending["time"]
+    
+    if action == "remind":
+        time_obj = dateparser.parse(
+            time_str, 
+            settings={'TIMEZONE': config.MY_TIME_ZONE, 'PREFER_DATES_FROM': 'future', 'RETURN_AS_TIMEZONE_AWARE': True}
+        )
+        if not time_obj:
+            await callback.message.edit_text(f"❌ Не смог распознать время: {time_str}")
+            return
+            
+        reminder_id = await database.add_reminder(callback.message.chat.id, text, str(time_obj))
+        scheduler.add_job(
+            send_reminder,               
+            trigger='date',              
+            run_date=time_obj,               
+            kwargs={'bot': bot, 'chat_id': callback.message.chat.id, 'task_text': text, 'reminder_id': reminder_id}
+        )
+        nice_time = time_obj.strftime("%d.%m в %H:%M")
+        await callback.message.edit_text(f"✅ Напоминание установлено на {nice_time}!")
+        
+    elif action == "calendar":
+        start_time = dateparser.parse(time_str, settings={'TIMEZONE': config.MY_TIME_ZONE, 'PREFER_DATES_FROM': 'future'})
+        if not start_time:
+            await callback.message.edit_text(f"❌ Не смог распознать время: {time_str}")
+            return
+            
+        end_time = start_time + timedelta(hours=1)
+        event_body = {
+            'summary': text,
+            'start': {'dateTime': start_time.isoformat(), 'timeZone': config.MY_TIME_ZONE},
+            'end': {'dateTime': end_time.isoformat(), 'timeZone': config.MY_TIME_ZONE}
+        }
+        e = await google_cal.add_event(event_body)
+        await callback.message.edit_text(
+            f"✅ Событие добавлено!\n<a href='{e.get('htmlLink')}'>Открыть календарь</a>", 
+            parse_mode="HTML", disable_web_page_preview=True
+        )
+
+    await callback.answer()
+    
+    
