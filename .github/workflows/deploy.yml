@@ -31,8 +31,17 @@ jobs:
         run: bandit -r app/ main.py
 
       - name: Run Pytest
+        env:
+          BOT_TOKEN: "test_token"
+          MY_ID: "12345"
+          MY_EMAIL: "test@example.com"
+          MY_CITY: "Moscow"
+          MY_TIME_ZONE: "Europe/Moscow"
+          MY_REGION: "test_region"
+          RSS_SITE: "http://test.rss"
+          OWM_API_KEY: "test_key"
+          AI_API_KEY: "fake_key" 
         run: pytest tests/ -v
-
   deploy:
     needs: test_and_security # Ждет успешного завершения job'ы test_and_security
     if: github.ref == 'refs/heads/main' && github.event_name == 'push' # Выполняется ТОЛЬКО при пуше или мерже в main
