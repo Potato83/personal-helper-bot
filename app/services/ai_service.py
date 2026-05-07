@@ -7,12 +7,14 @@ from loguru import logger
 import app.core.config as config
 
 
-# Используем твой прокси (Groq может быть заблокирован в РФ)
-# verify=False нужен, так как твой прокси самоподписанный
-http_client = httpx.AsyncClient(
-    proxy=config.PROXY_URL,
-    verify=False 
-) if config.PROXY_URL else httpx.AsyncClient(verify=False)
+
+if config.PROXY_URL:
+    http_client = httpx.AsyncClient(
+        proxy=config.PROXY_URL,
+        verify=False  # nosec B501
+    )
+else:
+    http_client = httpx.AsyncClient()
 
 client = AsyncOpenAI(
     api_key=config.AI_API_KEY, 
