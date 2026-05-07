@@ -40,6 +40,7 @@ jobs:
           MY_REGION: "test_region"
           RSS_SITE: "http://test.rss"
           OWM_API_KEY: "test_key"
+          AI_API_KEY: "fake_key" 
         run: pytest tests/ -v
   deploy:
     needs: test_and_security # Ждет успешного завершения job'ы test_and_security
